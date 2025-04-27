@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Decision Dice Roller</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.163.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.163.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <header>
+        <h1>Decision Dice Roller</h1>
+    </header>
+
+    <main class="container">
+        <aside class="sidebar">
+            <section class="list-section">
+                <h2>Games</h2>
+                <div class="list-manager">
+                    <input type="text" id="new-game-input" placeholder="Add a game" aria-label="Add a new game">
+                    <button id="add-game-btn" aria-label="Add game">Add</button>
+                </div>
+                <ul id="game-list" aria-label="Games list">
+                    <li class="empty-list-message">No games added yet. Add some games to create your dice!</li>
+                </ul>
+            </section>
+
+            <section class="list-section">
+                <h2>Movies/Shows</h2>
+                <div class="list-manager">
+                    <input type="text" id="new-movie-input" placeholder="Add a movie/show" aria-label="Add a new movie or show">
+                    <button id="add-movie-btn" aria-label="Add movie or show">Add</button>
+                </div>
+                <ul id="movie-list" aria-label="Movies and shows list">
+                    <li class="empty-list-message">No movies/shows added yet. Add some to create your dice!</li>
+                </ul>
+            </section>
+        </aside>
+
+        <section class="dice-area">
+            <div class="threejs-view" id="threejs-view">
+                <div id="game-dice-label" class="dice-label" aria-live="polite">Games: -</div>
+                <div id="movie-dice-label" class="dice-label" aria-live="polite">Movies/Shows: -</div>
+            </div>
+
+            <div id="results">
+                <h3>Last Roll Results:</h3>
+                <p id="game-roll-display" aria-live="polite">Games Die (Sides: 0) Roll: -</p>
+                <p id="movie-roll-display" aria-live="polite">Movies/Shows Die (Sides: 0) Roll: -</p>
+                <p id="winner-display" aria-live="polite">Winner: -</p>
+            </div>
+
+            <button id="roll-dice-btn" aria-label="Roll the dice">Roll Dice!</button>
+        </section>
+    </main>
+
+    <footer>
+        <p>&copy; 2023 Decision Dice Roller</p>
+    </footer>
+
+    <div id="result-popup" class="modal" role="dialog" aria-labelledby="popup-title">
+        <div class="modal-content">
+            <span class="close-button" aria-label="Close popup">&times;</span>
+            <h2 id="popup-title">Dice Roll Result</h2>
+            <p id="popup-message" aria-live="polite"></p>
+        </div>
+    </div>
+
+    <script src="script.js" type="module"></script>
+</body>
+</html>

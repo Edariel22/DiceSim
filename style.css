@@ -1,0 +1,485 @@
+/* General Body and Layout */
+body {
+    margin: 0;
+    font-family: 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; /* More common modern font stack */
+    background-color: #f4f7f6; /* Light grey background */
+    color: #333; /* Dark grey text */
+    line-height: 1.6;
+    min-height: 100vh; /* Ensure body takes at least full viewport height */
+    display: flex;
+    flex-direction: column; /* Stack header, main, footer */
+}
+
+header {
+    background-color: #2c3e50; /* Dark blue/grey header */
+    color: white;
+    padding: 1rem 1.5rem; /* Responsive padding */
+    text-align: center;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    flex-shrink: 0; /* Prevent header from shrinking */
+}
+
+header h1 {
+    margin: 0;
+    font-size: 1.8em;
+    font-weight: 600; /* Slightly bolder */
+}
+
+.container {
+    display: flex;
+    padding: 1.5rem; /* Responsive padding */
+    max-width: 1200px; /* Limit content width */
+    margin: 1.5rem auto; /* Center container with vertical margin */
+    background-color: #ffffff; /* White background for main content */
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); /* Softer, larger shadow */
+    border-radius: 10px; /* More rounded corners */
+    flex-grow: 1; /* Allow container to grow and fill space */
+}
+
+/* Sidebar Styles */
+.sidebar {
+    width: 280px; /* Fixed width sidebar */
+    margin-right: 2rem; /* Space between sidebar and dice area */
+    flex-shrink: 0;
+}
+
+.list-section {
+    margin-bottom: 1.5rem; /* Increased space between sections */
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #ecf0f1; /* Very light grey border */
+}
+
+.list-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+h2 {
+    color: #34495e; /* Darker heading color */
+    margin-top: 0;
+    margin-bottom: 0.8rem;
+    font-size: 1.3em;
+    font-weight: 600;
+}
+
+.list-manager {
+    display: flex;
+    margin-bottom: 0.8rem;
+    gap: 8px; /* Space between input and button */
+}
+
+.list-manager input[type="text"] {
+    flex-grow: 1;
+    padding: 0.6rem 0.8rem; /* Adjusted padding */
+    border: 1px solid #bdc3c7; /* Medium grey border */
+    border-radius: 5px;
+    font-size: 1em;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.list-manager input[type="text"]:focus {
+    outline: none;
+    border-color: #3498db; /* Blue focus border */
+    box-shadow: 0 0 5px rgba(52, 152, 219, 0.5); /* Blue glow on focus */
+}
+
+.list-manager button {
+    padding: 0.6rem 1rem;
+    background-color: #2ecc71; /* Emerald green */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 1em;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+.list-manager button:hover {
+    background-color: #27ae60; /* Darker green on hover */
+}
+.list-manager button:active {
+     transform: scale(0.98); /* Slight press effect */
+}
+
+
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    border: 1px solid #ecf0f1; /* Very light border */
+    border-radius: 5px;
+    max-height: 180px; /* Increased list height */
+    overflow-y: auto;
+    background-color: #f9f9f9; /* Off-white list background */
+}
+
+li {
+    padding: 0.7rem 0.8rem; /* Adjusted padding */
+    border-bottom: 1px solid #ecf0f1;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.95em;
+}
+
+li:last-child {
+    border-bottom: none;
+}
+
+li button {
+    background-color: #e74c3c; /* Alizarin red */
+    color: white;
+    border: none;
+    border-radius: 4px; /* Slightly smaller border radius */
+    padding: 0.3rem 0.6rem; /* Adjusted padding */
+    cursor: pointer;
+    font-size: 0.85em;
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+li button:hover {
+    background-color: #c0392b; /* Darker red on hover */
+}
+li button:active {
+     transform: scale(0.95); /* Slight press effect */
+}
+
+
+/* Dice Area Styles */
+.dice-area {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.threejs-view {
+    width: 100%;
+    max-width: 550px; /* Slightly larger max width for 3D screen */
+    height: 400px; /* Fixed height */
+    margin-bottom: 1.5rem; /* Space below the 3D view */
+    border: 1px solid #bdc3c7; /* Consistent border color */
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1); /* Subtle shadow */
+    position: relative;
+    overflow: hidden;
+    background-color: #ecf0f1; /* Light background behind 3D */
+}
+
+canvas {
+    display: block;
+    width: 100% !important;
+    height: 100% !important;
+}
+
+#roll-dice-btn {
+    display: block;
+    width: 100%;
+    max-width: 300px;
+    padding: 0.75rem 1.5rem; /* Adjusted padding */
+    background-color: #3498db; /* Peter River blue */
+    color: white;
+    border: none;
+    border-radius: 5px;
+    font-size: 1.1em;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 1.5rem; /* Space above button */
+    transition: background-color 0.3s ease, transform 0.1s ease;
+}
+
+#roll-dice-btn:hover {
+    background-color: #2980b9; /* Darker blue on hover */
+}
+#roll-dice-btn:active {
+     transform: scale(0.98); /* Slight press effect */
+}
+
+
+/* Results Area Styles */
+#results {
+    width: 100%;
+    max-width: 550px; /* Match width of 3D screen */
+    padding: 1rem; /* Adjusted padding */
+    border: 1px solid #ecf0f1; /* Light border */
+    border-radius: 8px;
+    background-color: #f9f9f9; /* Off-white background */
+    margin-top: 1rem; /* Space above results */
+}
+
+#results h3 {
+    margin-top: 0;
+    color: #34495e; /* Darker heading color */
+    font-size: 1.1em;
+    border-bottom: 1px solid #ecf0f1; /* Light border */
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.8rem;
+}
+
+#results p {
+    margin: 0.5rem 0; /* Adjusted vertical margin */
+    font-size: 1em;
+}
+
+#results p:last-child {
+    font-weight: bold; /* Make winner line bold */
+    color: #2c3e50; /* Dark color for winner */
+}
+
+
+/* Dice labels positioned over the 3D view */
+.dice-label {
+    position: absolute;
+    top: 1rem; /* Distance from top */
+    padding: 0.3rem 0.6rem;
+    background-color: rgba(255, 255, 255, 0.9); /* Slightly more opaque */
+    border: 1px solid #bdc3c7;
+    border-radius: 4px;
+    font-weight: bold;
+    z-index: 10;
+    pointer-events: none;
+    font-size: 0.9em;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Subtle shadow */
+}
+
+#game-dice-label {
+    left: 25%; /* Approximate position relative to its die (adjusted slightly) */
+    transform: translateX(-50%);
+}
+
+#movie-dice-label {
+     left: 75%; /* Approximate position relative to its die (adjusted slightly) */
+     transform: translateX(-50%);
+}
+
+
+/* Footer Styles */
+footer {
+    text-align: center;
+    padding: 1rem 1.5rem;
+    margin-top: 2rem; /* Space above footer */
+    background-color: #ecf0f1; /* Light grey footer */
+    color: #555;
+    font-size: 0.9em;
+    flex-shrink: 0; /* Prevent footer from shrinking */
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .container {
+        flex-direction: column; /* Stack sidebar and dice area vertically */
+        padding: 1rem; /* Reduced padding */
+        margin: 1rem auto; /* Reduced margin */
+    }
+
+    .sidebar {
+        width: 100%;
+        margin-right: 0;
+        margin-bottom: 1.5rem; /* Space below sidebar when stacked */
+    }
+
+    .dice-area {
+        width: 100%;
+    }
+
+     .threejs-view {
+        height: 300px; /* Adjust height for smaller screens */
+        max-width: 100%; /* Allow full width */
+     }
+
+     #results,
+     #roll-dice-btn {
+        max-width: 100%; /* Allow elements to take full width on small screens */
+     }
+
+     header h1 {
+         font-size: 1.5em; /* Slightly smaller header on small screens */
+     }
+}
+
+/* Modal Popup Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+.modal-content {
+    background-color: #f8f9fa;
+    margin: 15% auto;
+    padding: 20px;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 500px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    position: relative;
+    animation: slideIn 0.3s ease-out;
+}
+
+.close-button {
+    position: absolute;
+    right: 20px;
+    top: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+    color: #666;
+}
+
+.close-button:hover {
+    color: #000;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from { transform: translateY(-50px); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+#popup-title {
+    margin-top: 0;
+    color: #333;
+}
+
+#popup-message {
+    font-size: 1.2em;
+    color: #444;
+    margin: 20px 0;
+}
+
+/* Feedback Messages */
+.success-feedback,
+.delete-feedback {
+    position: relative;
+    padding: 0.5rem 1rem;
+    margin-bottom: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.9em;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+}
+
+.success-feedback {
+    background-color: rgba(46, 204, 113, 0.2);
+    color: #27ae60;
+    border: 1px solid #2ecc71;
+}
+
+.delete-feedback {
+    background-color: rgba(231, 76, 60, 0.2);
+    color: #c0392b;
+    border: 1px solid #e74c3c;
+}
+
+/* Button States */
+button:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+/* Empty List Message */
+.empty-list-message {
+    color: #7f8c8d;
+    font-style: italic;
+    text-align: center;
+    padding: 1rem !important;
+}
+
+/* Focus States */
+input:focus,
+button:focus {
+    outline: 2px solid #3498db;
+    outline-offset: 2px;
+}
+
+/* Animation for list items */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+li {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* Improved Modal Styles */
+.modal-content {
+    position: relative;
+    background-color: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    padding: 2rem;
+    max-width: 400px;
+    width: 90%;
+    margin: 20vh auto;
+    transform: translateY(-20px);
+    transition: transform 0.3s ease-out;
+}
+
+.modal.show .modal-content {
+    transform: translateY(0);
+}
+
+.close-button {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+    font-size: 1.5rem;
+    line-height: 1;
+    padding: 0.5rem;
+    cursor: pointer;
+    color: #7f8c8d;
+    background: none;
+    border: none;
+    transition: color 0.2s ease;
+}
+
+.close-button:hover {
+    color: #34495e;
+}
+
+/* Improved Results Display */
+#results {
+    background-color: #ffffff;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-top: 1.5rem;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+}
+
+#results h3 {
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    font-size: 1.2em;
+}
+
+#results p {
+    margin: 0.5rem 0;
+    padding: 0.5rem;
+    border-radius: 4px;
+    transition: background-color 0.2s ease;
+}
+
+#results p:hover {
+    background-color: #f8f9fa;
+}
+
+#winner-display {
+    font-weight: bold;
+    color: #2c3e50;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #ecf0f1;
+}
