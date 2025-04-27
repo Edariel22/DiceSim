@@ -54,31 +54,61 @@ function initPhysics() {
     groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
     world.addBody(groundBody);
 
+    // Create boundary walls
+    const wallShape = new CANNON.Box(new CANNON.Vec3(5, 0.5, 0.1));
+    const wallPhysicsMaterial = new CANNON.Material('wallMaterial');
+    
+    // Create walls
+    const walls = [
+        { position: new CANNON.Vec3(0, 0, 5), quaternion: new CANNON.Quaternion() }, // Front
+        { position: new CANNON.Vec3(0, 0, -5), quaternion: new CANNON.Quaternion() }, // Back
+        { position: new CANNON.Vec3(5, 0, 0), quaternion: new CANNON.Quaternion().setFromEuler(0, Math.PI/2, 0) }, // Right
+        { position: new CANNON.Vec3(-5, 0, 0), quaternion: new CANNON.Quaternion().setFromEuler(0, Math.PI/2, 0) } // Left
+    ];
+
+    walls.forEach(wall => {
+        const wallBody = new CANNON.Body({
+            mass: 0,
+            shape: wallShape,
+            material: wallPhysicsMaterial,
+            position: wall.position,
+            quaternion: wall.quaternion
+        });
+        world.addBody(wallBody);
+    });
+
     // Create dice physics bodies
     const diceMass = 1;
     const boxHalfExtents = new CANNON.Vec3(0.5, 0.5, 0.5);
     const diceShape = new CANNON.Box(boxHalfExtents);
     const diceMaterial = new CANNON.Material('diceMaterial');
     const groundMaterial = new CANNON.Material('groundMaterial');
+
+    // Create contact materials
     const diceGroundContact = new CANNON.ContactMaterial(groundMaterial, diceMaterial, {
         friction: 0.3,
         restitution: 0.3
     });
+    const diceWallContact = new CANNON.ContactMaterial(wallPhysicsMaterial, diceMaterial, {
+        friction: 0.3,
+        restitution: 0.3
+    });
     world.addContactMaterial(diceGroundContact);
+    world.addContactMaterial(diceWallContact);
 
     gameDiceBody = new CANNON.Body({ 
         mass: diceMass, 
         shape: diceShape, 
         material: diceMaterial,
-        linearDamping: 0.1,
-        angularDamping: 0.1
+        linearDamping: 0.2,
+        angularDamping: 0.2
     });
     movieDiceBody = new CANNON.Body({ 
         mass: diceMass, 
         shape: diceShape, 
         material: diceMaterial,
-        linearDamping: 0.1,
-        angularDamping: 0.1
+        linearDamping: 0.2,
+        angularDamping: 0.2
     });
 
     world.addBody(gameDiceBody);
@@ -92,8 +122,8 @@ function initThreeJS() {
     scene.background = new THREE.Color(0xf8f9fa);
 
     // Camera setup
-    camera = new THREE.PerspectiveCamera(60, threejsViewContainer.clientWidth / threejsViewContainer.clientHeight, 0.1, 1000);
-    camera.position.set(0, 3, 5);
+    camera = new THREE.PerspectiveCamera(45, threejsViewContainer.clientWidth / threejsViewContainer.clientHeight, 0.1, 1000);
+    camera.position.set(0, 4, 6);
     camera.lookAt(0, 0, 0);
 
     // Renderer setup
@@ -122,6 +152,33 @@ function initThreeJS() {
     directionalLight.shadow.mapSize.height = 1024;
     scene.add(directionalLight);
 
+    // Add a ground plane that's larger to catch the dice
+    const planeGeometry = new THREE.PlaneGeometry(20, 20);
+    const planeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xE9ECEF,
+        side: THREE.DoubleSide,
+        roughness: 0.8,
+        metalness: 0
+    });
+    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+    plane.rotation.x = Math.PI / 2;
+    plane.position.y = -0.5;
+    plane.receiveShadow = true;
+
+    scene.add(plane);
+
+    // Add a boundary to keep dice in view
+    const boundaryGeometry = new THREE.BoxGeometry(10, 1, 10);
+    const boundaryMaterial = new THREE.MeshBasicMaterial({
+        color: 0x000000,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.1
+    });
+    const boundary = new THREE.Mesh(boundaryGeometry, boundaryMaterial);
+    boundary.position.y = -0.5;
+    scene.add(boundary);
+
     // Dice materials
     const gameMaterial = new THREE.MeshStandardMaterial({
         color: 0xFD7E14,
@@ -142,20 +199,6 @@ function initThreeJS() {
     gameDiceMesh.castShadow = true;
     movieDiceMesh.castShadow = true;
 
-    // Ground plane
-    const planeGeometry = new THREE.PlaneGeometry(10, 10);
-    const planeMaterial = new THREE.MeshStandardMaterial({
-        color: 0xE9ECEF,
-        side: THREE.DoubleSide,
-        roughness: 0.8,
-        metalness: 0
-    });
-    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-    plane.rotation.x = Math.PI / 2;
-    plane.position.y = -0.5;
-    plane.receiveShadow = true;
-
-    scene.add(plane);
     scene.add(gameDiceMesh);
     scene.add(movieDiceMesh);
 
@@ -469,10 +512,10 @@ function handleRollDice() {
     rollDiceBtn.disabled = true;
     rollDiceBtn.textContent = 'Rolling...';
 
-    // Reset positions
+    // Reset positions with a smaller range
     const initialY = 2;
-    const initialX_Game = -1.5;
-    const initialX_Movie = 1.5;
+    const initialX_Game = -1;
+    const initialX_Movie = 1;
 
     gameDiceMesh.position.set(initialX_Game, initialY, 0);
     movieDiceMesh.position.set(initialX_Movie, initialY, 0);
@@ -485,10 +528,10 @@ function handleRollDice() {
     gameDiceBody.angularVelocity.set(0, 0, 0);
     movieDiceBody.angularVelocity.set(0, 0, 0);
 
-    // Apply forces
-    const forceMagnitude = 5;
-    const upForce = 2;
-    const maxSpin = 5;
+    // Apply forces with reduced magnitude
+    const forceMagnitude = 3;
+    const upForce = 1.5;
+    const maxSpin = 3;
 
     const gameForce = new CANNON.Vec3(
         (Math.random() - 0.5) * forceMagnitude,
@@ -521,9 +564,9 @@ function handleRollDice() {
     gameDiceBody.wakeUp();
     movieDiceBody.wakeUp();
 
-    // Check for dice stopping
+    // Check for dice stopping with reduced time
     let checkCount = 0;
-    const maxChecks = 200; // Maximum number of checks (about 20 seconds)
+    const maxChecks = 100; // Reduced to about 10 seconds
     
     diceStoppedCheckInterval = setInterval(() => {
         checkCount++;
