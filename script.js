@@ -1,12 +1,20 @@
 import * as THREE from 'three';
 // Optional: If you want camera controls for easy viewing in development
-// import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'; // For HDRIs
+import * as CANNON from 'cannon-es';
 
-let scene, camera, renderer;
+// --- Global Variables ---
+let scene, camera, renderer, controls;
+let world; // Cannon-es physics world
 let gameDiceMesh, movieDiceMesh;
+let gameDiceBody, movieDiceBody, groundBody; // Cannon-es physics bodies
 let gameRollLabel, movieRollLabel; // References to the 2D labels
 let games = [];
 let movies = [];
+let isRolling = false; // Flag to prevent multiple rolls at once
+let diceStoppedCheckInterval; // Interval to check if dice have stopped
+
 
 // Get DOM elements
 const gameListUl = document.getElementById('game-list');
@@ -23,65 +31,136 @@ const threejsViewContainer = document.getElementById('threejs-view');
 
 gameRollLabel = document.getElementById('game-dice-label');
 movieRollLabel = document.getElementById('movie-dice-label');
+const popup = document.getElementById('result-popup');
+const popupMessage = document.getElementById('popup-message');
+const closeButton = document.querySelector('.close-button');
+
+
+// --- Physics Setup ---
+function initPhysics() {
+    world = new CANNON.World({
+        gravity: new CANNON.Vec3(0, -9.82, 0),
+        allowSleep: true,
+        broadphase: new CANNON.SAPBroadphase(world),
+        defaultContactMaterial: {
+            friction: 0.3,
+            restitution: 0.3
+        }
+    });
+
+    // Create ground plane physics body
+    const groundShape = new CANNON.Plane();
+    groundBody = new CANNON.Body({ mass: 0, shape: groundShape });
+    groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0);
+    world.addBody(groundBody);
+
+    // Create dice physics bodies
+    const diceMass = 1;
+    const boxHalfExtents = new CANNON.Vec3(0.5, 0.5, 0.5);
+    const diceShape = new CANNON.Box(boxHalfExtents);
+    const diceMaterial = new CANNON.Material('diceMaterial');
+    const groundMaterial = new CANNON.Material('groundMaterial');
+    const diceGroundContact = new CANNON.ContactMaterial(groundMaterial, diceMaterial, {
+        friction: 0.3,
+        restitution: 0.3
+    });
+    world.addContactMaterial(diceGroundContact);
+
+    gameDiceBody = new CANNON.Body({ 
+        mass: diceMass, 
+        shape: diceShape, 
+        material: diceMaterial,
+        linearDamping: 0.1,
+        angularDamping: 0.1
+    });
+    movieDiceBody = new CANNON.Body({ 
+        mass: diceMass, 
+        shape: diceShape, 
+        material: diceMaterial,
+        linearDamping: 0.1,
+        angularDamping: 0.1
+    });
+
+    world.addBody(gameDiceBody);
+    world.addBody(movieDiceBody);
+}
 
 
 // --- Three.js Setup ---
 function initThreeJS() {
-    // Scene
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0xf8f9fa); // Light background
+    scene.background = new THREE.Color(0xf8f9fa);
 
-    // Camera
-    camera = new THREE.PerspectiveCamera(75, threejsViewContainer.clientWidth / threejsViewContainer.clientHeight, 0.1, 1000);
-    camera.position.set(0, 1.5, 3); // Adjusted position
+    // Camera setup
+    camera = new THREE.PerspectiveCamera(60, threejsViewContainer.clientWidth / threejsViewContainer.clientHeight, 0.1, 1000);
+    camera.position.set(0, 3, 5);
     camera.lookAt(0, 0, 0);
 
-    // Renderer
+    // Renderer setup
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(threejsViewContainer.clientWidth, threejsViewContainer.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
     threejsViewContainer.appendChild(renderer.domElement);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xaaaaaa);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
+
     const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    directionalLight.position.set(5, 10, 7).normalize();
+    directionalLight.position.set(5, 10, 5);
+    directionalLight.castShadow = true;
+    directionalLight.shadow.camera.left = -5;
+    directionalLight.shadow.camera.right = 5;
+    directionalLight.shadow.camera.top = 5;
+    directionalLight.shadow.camera.bottom = -5;
+    directionalLight.shadow.camera.near = 0.1;
+    directionalLight.shadow.camera.far = 30;
+    directionalLight.shadow.mapSize.width = 1024;
+    directionalLight.shadow.mapSize.height = 1024;
     scene.add(directionalLight);
 
-    // Dice Meshes (Simple Cubes)
-    const geometry = new THREE.BoxGeometry(1, 1, 1); // Cube size 1x1x1
-    const gameMaterial = new THREE.MeshStandardMaterial({ color: 0xe74c3c }); // Reddish-orange
-    const movieMaterial = new THREE.MeshStandardMaterial({ color: 0x3498db }); // Bluish
+    // Dice materials
+    const gameMaterial = new THREE.MeshStandardMaterial({
+        color: 0xFD7E14,
+        metalness: 0.2,
+        roughness: 0.4
+    });
+    const movieMaterial = new THREE.MeshStandardMaterial({
+        color: 0x6F42C1,
+        metalness: 0.2,
+        roughness: 0.4
+    });
 
+    // Dice geometry
+    const geometry = new THREE.BoxGeometry(1, 1, 1);
     gameDiceMesh = new THREE.Mesh(geometry, gameMaterial);
     movieDiceMesh = new THREE.Mesh(geometry, movieMaterial);
 
-    // Position the dice relative to the center (0,0,0)
-    gameDiceMesh.position.x = -1.5; // Position left
-    movieDiceMesh.position.x = 1.5;  // Position right
+    gameDiceMesh.castShadow = true;
+    movieDiceMesh.castShadow = true;
 
+    // Ground plane
+    const planeGeometry = new THREE.PlaneGeometry(10, 10);
+    const planeMaterial = new THREE.MeshStandardMaterial({
+        color: 0xE9ECEF,
+        side: THREE.DoubleSide,
+        roughness: 0.8,
+        metalness: 0
+    });
+    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+    plane.rotation.x = Math.PI / 2;
+    plane.position.y = -0.5;
+    plane.receiveShadow = true;
+
+    scene.add(plane);
     scene.add(gameDiceMesh);
     scene.add(movieDiceMesh);
 
-    // Optional: Add ground plane
-    const planeGeometry = new THREE.PlaneGeometry(10, 10);
-    const planeMaterial = new THREE.MeshStandardMaterial({ color: 0xbdc3c7, side: THREE.DoubleSide }); // Light grey material
-    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-    plane.rotation.x = Math.PI / 2; // Rotate to be horizontal
-    plane.position.y = -0.5; // Position slightly below the dice
-    scene.add(plane);
-
-    // Optional: Orbit Controls for development (uncomment if using)
-    // const controls = new OrbitControls(camera, renderer.domElement);
-    // controls.enableDamping = true;
-    // controls.dampingFactor = 0.25;
-    // controls.screenSpacePanning = false;
-
     // Handle window resize
     window.addEventListener('resize', onWindowResize, false);
-
-    // Initial render
-    renderer.render(scene, camera);
 
     // Start the animation loop
     animate();
@@ -96,22 +175,37 @@ function onWindowResize() {
     renderer.setSize(threejsViewContainer.clientWidth, threejsViewContainer.clientHeight);
 
     // Re-render the scene after resize
-    renderer.render(scene, camera);
+    // renderer.render(scene, camera); // Render is called in animate loop
 }
 
-// Animation loop
-function animate() {
+// Animation loop (renders scene and steps physics)
+const timeStep = 1 / 60; // fixed physics step
+let lastTime = 0;
+function animate(time) {
     requestAnimationFrame(animate);
 
-    // If using OrbitControls:
-    // controls.update();
+    // Calculate delta time
+    const dt = time !== undefined ? (time - lastTime) / 1000 : timeStep;
+    lastTime = time;
+
+    // Step the physics world
+    if (world) {
+        world.step(timeStep);
+
+        // Copy position and rotation from physics to three.js
+        gameDiceMesh.position.copy(gameDiceBody.position);
+        gameDiceMesh.quaternion.copy(gameDiceBody.quaternion);
+
+        movieDiceMesh.position.copy(movieDiceBody.position);
+        movieDiceMesh.quaternion.copy(movieDiceBody.quaternion);
+    }
 
     renderer.render(scene, camera);
 }
 
 // --- UI and Game Logic ---
 
-// Add this function after the existing functions but before the event listeners
+// Function to display message when list is empty
 function showEmptyListMessage(ulElement) {
     const emptyMessage = ulElement.querySelector('.empty-list-message');
     if (ulElement.children.length === 1) { // Only the empty message remains
@@ -121,87 +215,151 @@ function showEmptyListMessage(ulElement) {
     }
 }
 
-// Update the renderList function
+// Render items from array to the HTML list
 function renderList(list, ulElement, type) {
     ulElement.innerHTML = ''; // Clear current list
-    
-    // Add empty list message
+
+    // Add empty list message placeholder
     const emptyMessage = document.createElement('li');
     emptyMessage.className = 'empty-list-message';
-    emptyMessage.textContent = type === 'games' 
+    emptyMessage.textContent = type === 'game'
         ? 'No games added yet. Add some games to create your dice!'
         : 'No movies/shows added yet. Add some to create your dice!';
-    ulElement.appendChild(emptyMessage);
-    
+    ulElement.appendChild(emptyMessage); // Add it even when list is not empty, control display via CSS
+
+
     list.forEach((item, index) => {
         const li = document.createElement('li');
         li.textContent = item;
+        li.classList.add('list-item'); // Add class for styling
+
+        // Create delete button (using icon would be more professional)
         const deleteBtn = document.createElement('button');
         deleteBtn.textContent = 'Delete';
-        deleteBtn.dataset.index = index;
-        deleteBtn.dataset.type = type;
+        deleteBtn.classList.add('btn', 'btn-danger'); // Add classes for styling
+        deleteBtn.dataset.index = index; // Store index for deletion
+        deleteBtn.dataset.type = type; // Store type (game or movie)
         deleteBtn.setAttribute('aria-label', `Delete ${item}`);
+
         li.appendChild(deleteBtn);
         ulElement.appendChild(li);
     });
-    
-    showEmptyListMessage(ulElement);
+
+    showEmptyListMessage(ulElement); // Check and display message if list is truly empty
 }
+
+
+// Load saved data from localStorage on page load
+function loadSavedData() {
+    const savedGames = localStorage.getItem('savedGames');
+    const savedMovies = localStorage.getItem('savedMovies');
+
+    if (savedGames) {
+        try {
+            games = JSON.parse(savedGames);
+        } catch (e) {
+            console.error("Failed to parse saved games data:", e);
+            games = []; // Reset if data is corrupt
+        }
+    }
+
+    if (savedMovies) {
+        try {
+            movies = JSON.parse(savedMovies);
+        } catch (e) {
+            console.error("Failed to parse saved movies data:", e);
+            movies = []; // Reset if data is corrupt
+        }
+    }
+}
+
+// Save data to localStorage
+function saveData() {
+    try {
+        localStorage.setItem('savedGames', JSON.stringify(games));
+        localStorage.setItem('savedMovies', JSON.stringify(movies));
+    } catch (e) {
+        console.error("Failed to save data to local storage:", e);
+        // Optionally provide user feedback that saving failed
+    }
+}
+
+// Show temporary feedback message (for add/delete)
+function showFeedback(message, type, ulElement) {
+     // Remove existing feedback messages for this list
+     ulElement.parentNode.querySelectorAll('.feedback-message').forEach(fb => fb.remove());
+
+    const feedback = document.createElement('div');
+    feedback.className = `feedback-message ${type === 'success' ? 'success-feedback' : 'delete-feedback'}`;
+    feedback.textContent = message;
+    feedback.setAttribute('aria-live', 'polite'); // Announce to screen readers
+
+    // Insert feedback above the list
+    ulElement.parentNode.insertBefore(feedback, ulElement);
+
+    // Remove feedback after animation/delay
+    setTimeout(() => {
+        feedback.style.opacity = '0';
+        setTimeout(() => feedback.remove(), 300); // Remove after fade out
+    }, 2000); // Display for 2 seconds
+}
+
 
 // Update the addItem function
 function addItem(list, inputElement, ulElement, type) {
-    const itemName = inputElement.value.trim();
-    if (itemName) {
-        list.push(itemName);
+    const newItem = inputElement.value.trim();
+    if (newItem) {
+        list.push(newItem);
         renderList(list, ulElement, type);
-        inputElement.value = '';
-        inputElement.focus(); // Return focus to input
+        saveData(); // Save after adding item
         updateSidesDisplay();
-        
-        // Show success feedback
-        const feedback = document.createElement('div');
-        feedback.className = 'success-feedback';
-        feedback.textContent = `${itemName} added!`;
-        feedback.setAttribute('aria-live', 'polite');
-        ulElement.parentNode.insertBefore(feedback, ulElement);
-        
-        // Remove feedback after animation
-        setTimeout(() => {
-            feedback.style.opacity = '0';
-            setTimeout(() => feedback.remove(), 300);
-        }, 1500);
+        inputElement.value = ''; // Clear input
+        inputElement.focus(); // Return focus to input
+
+        showFeedback(`${newItem} added!`, 'success', ulElement);
     }
 }
 
 // Update the deleteItem function
 function deleteItem(event) {
-    if (event.target.tagName === 'BUTTON' && event.target.textContent === 'Delete') {
-        const index = parseInt(event.target.dataset.index);
-        const type = event.target.dataset.type;
-        const list = type === 'games' ? games : movies;
-        const ulElement = type === 'games' ? gameListUl : movieListUl;
-        
-        if (index >= 0 && index < list.length) {
-            const deletedItem = list[index];
-            list.splice(index, 1);
-            renderList(list, ulElement, type);
-            updateSidesDisplay();
-            
-            // Show deletion feedback
-            const feedback = document.createElement('div');
-            feedback.className = 'delete-feedback';
-            feedback.textContent = `${deletedItem} removed`;
-            feedback.setAttribute('aria-live', 'polite');
-            ulElement.parentNode.insertBefore(feedback, ulElement);
-            
-            // Remove feedback after animation
-            setTimeout(() => {
-                feedback.style.opacity = '0';
-                setTimeout(() => feedback.remove(), 300);
-            }, 1500);
+    // Use event delegation on the UL, but check if a delete button was clicked
+    if (!event.target.classList.contains('btn-danger')) return;
+
+    const button = event.target;
+    const listItem = button.closest('.list-item');
+    if (!listItem) return; // Should not happen if delegation is on UL
+
+    const ulElement = listItem.parentElement;
+    const type = button.dataset.type; // 'game' or 'movie'
+    // Find the index of the list item within the UL, ignoring the empty message
+    const index = Array.from(ulElement.children).filter(child => child.classList.contains('list-item')).indexOf(listItem);
+
+    if (index === -1) return; // Should not happen
+
+
+    let deletedItem;
+    if (type === 'game') {
+        if (index >= 0 && index < games.length) {
+            deletedItem = games[index];
+            games.splice(index, 1);
+            renderList(games, gameListUl, 'game');
+             showFeedback(`${deletedItem} removed.`, 'delete', gameListUl);
         }
+    } else if (type === 'movie') {
+         if (index >= 0 && index < movies.length) {
+            deletedItem = movies[index];
+            movies.splice(index, 1);
+            renderList(movies, movieListUl, 'movie');
+             showFeedback(`${deletedItem} removed.`, 'delete', movieListUl);
+         }
+    } else {
+        return; // Invalid type
     }
+
+    saveData(); // Save after deleting item
+    updateSidesDisplay(); // Update side counts and results display
 }
+
 
 // Function to update the side count display in the results area
 function updateSidesDisplay() {
@@ -215,25 +373,24 @@ function updateSidesDisplay() {
 }
 
 /**
- * Rolls a die with the specified number of sides.
+ * Rolls a die with the specified number of sides using a good random source.
+ * This is the *outcome* generator, independent of the physics simulation.
  * @param {number} sides - The number of sides on the die (equal to the number of items in the list)
  * @returns {number} - A random integer between 1 and sides (inclusive), or 0 if sides <= 0
- * 
- * Fairness Guarantees:
- * 1. Each number from 1 to sides has an equal probability (1/sides) of being rolled
- * 2. Returns 0 if the list is empty (sides <= 0)
- * 3. Uses a cryptographically secure random number generator when available
  */
 function rollDie(sides) {
     if (sides <= 0) {
         return 0; // Cannot roll a die with 0 or fewer sides
     }
-    
+
     // Use crypto.getRandomValues if available (more secure), fallback to Math.random
     if (window.crypto && window.crypto.getRandomValues) {
         const array = new Uint32Array(1);
         window.crypto.getRandomValues(array);
-        return (array[0] % sides) + 1;
+        // Map the random 32-bit integer to the range [1, sides]
+        // Use floating point for division before flooring to reduce bias for large ranges
+        return Math.floor(array[0] / (0xFFFFFFFF + 1) * sides) + 1;
+
     } else {
         // Fallback to Math.random if crypto API is not available
         return Math.floor(Math.random() * sides) + 1;
@@ -247,12 +404,6 @@ function rollDie(sides) {
  * @param {number} gameSides - The number of sides on the Games Die
  * @param {number} movieSides - The number of sides on the Movies/Shows Die
  * @returns {Object} - An object containing the winner and selected item
- * 
- * Fairness Guarantees:
- * 1. The die with the higher roll wins
- * 2. If rolls are equal, it's a tie
- * 3. The winning item is selected using the roll value as an index (roll-1)
- * 4. If the winning list is empty (sides = 0), no item is selected
  */
 function determineWinner(gameRoll, movieRoll, gameSides, movieSides) {
     let winner = 'tie';
@@ -261,154 +412,181 @@ function determineWinner(gameRoll, movieRoll, gameSides, movieSides) {
     if (gameRoll > movieRoll) {
         winner = 'games';
         if (gameSides > 0) {
-            selectedItem = games[gameRoll - 1];
+            selectedItem = games[gameRoll - 1]; // Select item based on roll number
         }
     } else if (movieRoll > gameRoll) {
         winner = 'movies';
         if (movieSides > 0) {
-            selectedItem = movies[movieRoll - 1];
+            selectedItem = movies[movieRoll - 1]; // Select item based on roll number
         }
+    } else {
+        // It's a tie, no specific item is selected from *either* list as "the" winner
+        winner = 'tie';
     }
     
     return { winner, selectedItem };
 }
 
-// Replace the showNotification function with showPopup
+// Show popup with selected item
 function showPopup(message) {
-    const popup = document.getElementById('result-popup');
-    const popupMessage = document.getElementById('popup-message');
-    const closeButton = document.querySelector('.close-button');
-    
     popupMessage.textContent = message;
-    popup.style.display = 'block';
-    
-    // Close popup when clicking the close button
-    closeButton.onclick = function() {
+    popup.style.display = 'flex'; // Use flex to center content
+
+    // Automatically hide popup after a few seconds
+    setTimeout(() => {
         popup.style.display = 'none';
-    }
-    
-    // Close popup when clicking outside the modal
-    window.onclick = function(event) {
-        if (event.target === popup) {
-            popup.style.display = 'none';
-        }
+    }, 5000); // Hide after 5 seconds
+}
+
+// Close popup when clicking the close button
+closeButton.onclick = function() {
+    popup.style.display = 'none';
+}
+
+// Close popup when clicking outside the modal content
+window.onclick = function(event) {
+    if (event.target === popup) {
+        popup.style.display = 'none';
     }
 }
 
-// Update the handleRollDice function
+
+// --- Dice Rolling Logic (Physics Integrated) ---
 function handleRollDice() {
+    if (isRolling) return;
+
     const gameSides = games.length;
     const movieSides = movies.length;
-    
-    // Disable roll button during animation
-    rollDiceBtn.disabled = true;
-    rollDiceBtn.textContent = 'Rolling...';
-    
-    // Update displays
-    gameRollDisplay.textContent = `Games Die (Sides: ${gameSides}) Roll: -`;
-    movieRollDisplay.textContent = `Movies/Shows Die (Sides: ${movieSides}) Roll: -`;
-    winnerDisplay.textContent = 'Winner: Rolling...';
-    
-    gameRollLabel.textContent = `Games: Rolling...`;
-    movieRollLabel.textContent = `Movies/Shows: Rolling...`;
-    
+
     if (gameSides === 0 && movieSides === 0) {
         winnerDisplay.textContent = 'Winner: Both lists are empty. Cannot roll.';
         gameRollLabel.textContent = `Games: N/A`;
         movieRollLabel.textContent = `Movies/Shows: N/A`;
-        rollDiceBtn.disabled = false;
-        rollDiceBtn.textContent = 'Roll Dice!';
         return;
     }
+
+    isRolling = true;
+    rollDiceBtn.disabled = true;
+    rollDiceBtn.textContent = 'Rolling...';
+
+    // Reset positions
+    const initialY = 2;
+    const initialX_Game = -1.5;
+    const initialX_Movie = 1.5;
+
+    gameDiceMesh.position.set(initialX_Game, initialY, 0);
+    movieDiceMesh.position.set(initialX_Movie, initialY, 0);
+    gameDiceBody.position.copy(gameDiceMesh.position);
+    movieDiceBody.position.copy(movieDiceMesh.position);
+
+    // Reset velocities
+    gameDiceBody.velocity.set(0, 0, 0);
+    movieDiceBody.velocity.set(0, 0, 0);
+    gameDiceBody.angularVelocity.set(0, 0, 0);
+    movieDiceBody.angularVelocity.set(0, 0, 0);
+
+    // Apply forces
+    const forceMagnitude = 5;
+    const upForce = 2;
+    const maxSpin = 5;
+
+    const gameForce = new CANNON.Vec3(
+        (Math.random() - 0.5) * forceMagnitude,
+        upForce + Math.random() * forceMagnitude,
+        (Math.random() - 0.5) * forceMagnitude
+    );
+    const movieForce = new CANNON.Vec3(
+        (Math.random() - 0.5) * forceMagnitude,
+        upForce + Math.random() * forceMagnitude,
+        (Math.random() - 0.5) * forceMagnitude
+    );
+
+    const gameTorque = new CANNON.Vec3(
+        (Math.random() - 0.5) * maxSpin,
+        (Math.random() - 0.5) * maxSpin,
+        (Math.random() - 0.5) * maxSpin
+    );
+    const movieTorque = new CANNON.Vec3(
+        (Math.random() - 0.5) * maxSpin,
+        (Math.random() - 0.5) * maxSpin,
+        (Math.random() - 0.5) * maxSpin
+    );
+
+    gameDiceBody.applyImpulse(gameForce, gameDiceBody.position);
+    gameDiceBody.applyTorque(gameTorque);
+    movieDiceBody.applyImpulse(movieForce, movieDiceBody.position);
+    movieDiceBody.applyTorque(movieTorque);
+
+    // Wake up bodies
+    gameDiceBody.wakeUp();
+    movieDiceBody.wakeUp();
+
+    // Check for dice stopping
+    let checkCount = 0;
+    const maxChecks = 200; // Maximum number of checks (about 20 seconds)
     
-    // Roll dice
-    const gameRoll = rollDie(gameSides);
-    const movieRoll = rollDie(movieSides);
-
-    // Animation duration and setup
-    const rollDuration = 1200; // milliseconds
-    const startTime = Date.now();
-    const initialRotationG = gameDiceMesh.rotation.clone();
-    const initialRotationM = movieDiceMesh.rotation.clone();
-
-    function animateRoll() {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / rollDuration, 1); // Progress from 0 to 1
-
-        // Simple random rotation during the "roll" that eases out
-        const easeOutProgress = 1 - Math.pow(1 - progress, 3); // Easing function
-        const rotateSpeed = 0.5; // Adjust speed of rotation
-
-        // Apply random rotation proportional to remaining animation time
-        gameDiceMesh.rotation.x = initialRotationG.x + (Math.random() * 4 * Math.PI - 2 * Math.PI) * (1 - easeOutProgress);
-        gameDiceMesh.rotation.y = initialRotationG.y + (Math.random() * 4 * Math.PI - 2 * Math.PI) * (1 - easeOutProgress);
-        gameDiceMesh.rotation.z = initialRotationG.z + (Math.random() * 4 * Math.PI - 2 * Math.PI) * (1 - easeOutProgress);
-
-        movieDiceMesh.rotation.x = initialRotationM.x + (Math.random() * 4 * Math.PI - 2 * Math.PI) * (1 - easeOutProgress);
-        movieDiceMesh.rotation.y = initialRotationM.y + (Math.random() * 4 * Math.PI - 2 * Math.PI) * (1 - easeOutProgress);
-        movieDiceMesh.rotation.z = initialRotationM.z + (Math.random() * 4 * Math.PI - 2 * Math.PI) * (1 - easeOutProgress);
-
-
-        renderer.render(scene, camera);
-
-        if (progress < 1) {
-            requestAnimationFrame(animateRoll);
-        } else {
-            // Animation finished - determine winner and update UI
-            const { winner, selectedItem } = determineWinner(gameRoll, movieRoll, gameSides, movieSides);
+    diceStoppedCheckInterval = setInterval(() => {
+        checkCount++;
+        
+        // Check if dice are sleeping or if we've reached max checks
+        if ((gameDiceBody.sleepState === CANNON.Body.SLEEPING && 
+             movieDiceBody.sleepState === CANNON.Body.SLEEPING) ||
+            checkCount >= maxChecks) {
             
-            // Update displays
-            gameRollDisplay.textContent = `Games Die (Sides: ${gameSides}) Roll: ${gameRoll}`;
-            movieRollDisplay.textContent = `Movies/Shows Die (Sides: ${movieSides}) Roll: ${movieRoll}`;
-            
-            gameRollLabel.textContent = `Games: ${gameRoll}`;
-            movieRollLabel.textContent = `Movies/Shows: ${movieRoll}`;
-            
-            // Update winner display and show popup
+            clearInterval(diceStoppedCheckInterval);
+
+            // Force dice to sleep if they haven't naturally
+            if (checkCount >= maxChecks) {
+                gameDiceBody.sleep();
+                movieDiceBody.sleep();
+            }
+
+            isRolling = false;
+            rollDiceBtn.disabled = false;
+            rollDiceBtn.textContent = 'Roll Dice!';
+
+            const finalGameRoll = rollDie(gameSides);
+            const finalMovieRoll = rollDie(movieSides);
+
+            const { winner, selectedItem } = determineWinner(finalGameRoll, finalMovieRoll, gameSides, movieSides);
+
+            gameRollDisplay.textContent = `Games Die (Sides: ${gameSides}) Roll: ${finalGameRoll}`;
+            movieRollDisplay.textContent = `Movies/Shows Die (Sides: ${movieSides}) Roll: ${finalMovieRoll}`;
+            gameRollLabel.textContent = `Games: ${finalGameRoll}`;
+            movieRollLabel.textContent = `Movies/Shows: ${finalMovieRoll}`;
+
             if (winner === 'games') {
-                winnerDisplay.textContent = `Winner: Games Die! (Rolled ${gameRoll})`;
+                winnerDisplay.textContent = `Winner: Games Die! (Rolled ${finalGameRoll})`;
                 if (selectedItem) {
                     showPopup(`🎮 Game Selected: ${selectedItem}`);
                 }
             } else if (winner === 'movies') {
-                winnerDisplay.textContent = `Winner: Movies/Shows Die! (Rolled ${movieRoll})`;
+                winnerDisplay.textContent = `Winner: Movies/Shows Die! (Rolled ${finalMovieRoll})`;
                 if (selectedItem) {
                     showPopup(`🎬 Movie/Show Selected: ${selectedItem}`);
                 }
             } else {
-                winnerDisplay.textContent = `Winner: It's a Tie! (Both rolled ${gameRoll})`;
+                winnerDisplay.textContent = `Winner: It's a Tie! (Both rolled ${finalGameRoll})`;
             }
-            
-            // Reset button state
-            rollDiceBtn.disabled = false;
-            rollDiceBtn.textContent = 'Roll Dice!';
-            
-            // Reset rotation
-            gameDiceMesh.rotation.set(0, 0, 0);
-            movieDiceMesh.rotation.set(0, 0, 0);
-            renderer.render(scene, camera);
         }
-    }
-
-    // Start the animation
-    animateRoll();
+    }, 100);
 }
 
 
 // --- Event Listeners ---
-addGameBtn.addEventListener('click', () => addItem(games, newGameInput, gameListUl, 'games'));
-addMovieBtn.addEventListener('click', () => addItem(movies, newMovieInput, movieListUl, 'movies'));
+addGameBtn.addEventListener('click', () => addItem(games, newGameInput, gameListUl, 'game'));
+addMovieBtn.addEventListener('click', () => addItem(movies, newMovieInput, movieListUl, 'movie'));
 
 // Allow adding by pressing Enter in input fields
 newGameInput.addEventListener('keypress', function(event) {
     if (event.key === 'Enter') {
-        addItem(games, newGameInput, gameListUl, 'games');
-        event.preventDefault(); // Prevent default form submission if input is in a form
+        addItem(games, newGameInput, gameListUl, 'game');
+        event.preventDefault(); // Prevent default form submission
     }
 });
  newMovieInput.addEventListener('keypress', function(event) {
     if (event.key === 'Enter') {
-        addItem(movies, newMovieInput, movieListUl, 'movies');
+        addItem(movies, newMovieInput, movieListUl, 'movie');
         event.preventDefault(); // Prevent default form submission
     }
 });
@@ -422,11 +600,11 @@ rollDiceBtn.addEventListener('click', handleRollDice);
 
 
 // --- Initialization ---
-initThreeJS(); // Setup the 3D scene
-renderList(games, gameListUl, 'games'); // Initial render of empty lists
-renderList(movies, movieListUl, 'movies');
+initPhysics(); // Setup physics world
+initThreeJS(); // Setup 3D scene and link to physics bodies
+loadSavedData(); // Load saved data
+renderList(games, gameListUl, 'game'); // Initial render of empty lists
+renderList(movies, movieListUl, 'movie');
 updateSidesDisplay(); // Initialize side count display
 
-// Note: The main animate() loop started in initThreeJS continues to run
-// for potential continuous rendering needs (like OrbitControls).
-// The animateRoll() function is a separate, temporary animation called on roll.
+// The main animate() loop now handles both rendering and physics steps.
