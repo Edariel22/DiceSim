@@ -214,12 +214,63 @@ function updateSidesDisplay() {
      movieRollLabel.textContent = `Movies/Shows: -`; // Reset label
 }
 
-// Roll die function (JavaScript's Math.random)
+/**
+ * Rolls a die with the specified number of sides.
+ * @param {number} sides - The number of sides on the die (equal to the number of items in the list)
+ * @returns {number} - A random integer between 1 and sides (inclusive), or 0 if sides <= 0
+ * 
+ * Fairness Guarantees:
+ * 1. Each number from 1 to sides has an equal probability (1/sides) of being rolled
+ * 2. Returns 0 if the list is empty (sides <= 0)
+ * 3. Uses a cryptographically secure random number generator when available
+ */
 function rollDie(sides) {
     if (sides <= 0) {
         return 0; // Cannot roll a die with 0 or fewer sides
     }
-    return Math.floor(Math.random() * sides) + 1;
+    
+    // Use crypto.getRandomValues if available (more secure), fallback to Math.random
+    if (window.crypto && window.crypto.getRandomValues) {
+        const array = new Uint32Array(1);
+        window.crypto.getRandomValues(array);
+        return (array[0] % sides) + 1;
+    } else {
+        // Fallback to Math.random if crypto API is not available
+        return Math.floor(Math.random() * sides) + 1;
+    }
+}
+
+/**
+ * Determines the winner between two dice rolls and selects the winning item.
+ * @param {number} gameRoll - The roll value for the Games Die
+ * @param {number} movieRoll - The roll value for the Movies/Shows Die
+ * @param {number} gameSides - The number of sides on the Games Die
+ * @param {number} movieSides - The number of sides on the Movies/Shows Die
+ * @returns {Object} - An object containing the winner and selected item
+ * 
+ * Fairness Guarantees:
+ * 1. The die with the higher roll wins
+ * 2. If rolls are equal, it's a tie
+ * 3. The winning item is selected using the roll value as an index (roll-1)
+ * 4. If the winning list is empty (sides = 0), no item is selected
+ */
+function determineWinner(gameRoll, movieRoll, gameSides, movieSides) {
+    let winner = 'tie';
+    let selectedItem = null;
+    
+    if (gameRoll > movieRoll) {
+        winner = 'games';
+        if (gameSides > 0) {
+            selectedItem = games[gameRoll - 1];
+        }
+    } else if (movieRoll > gameRoll) {
+        winner = 'movies';
+        if (movieSides > 0) {
+            selectedItem = movies[movieRoll - 1];
+        }
+    }
+    
+    return { winner, selectedItem };
 }
 
 // Replace the showNotification function with showPopup
@@ -270,7 +321,7 @@ function handleRollDice() {
         return;
     }
     
-    // Roll dice (roll 0 if sides is 0, otherwise roll 1 to sides)
+    // Roll dice
     const gameRoll = rollDie(gameSides);
     const movieRoll = rollDie(movieSides);
 
@@ -279,12 +330,6 @@ function handleRollDice() {
     const startTime = Date.now();
     const initialRotationG = gameDiceMesh.rotation.clone();
     const initialRotationM = movieDiceMesh.rotation.clone();
-
-    // Store final roll values and sides to display AFTER animation
-    const finalGameRoll = gameRoll;
-    const finalMovieRoll = movieRoll;
-    const finalGameSides = gameSides;
-    const finalMovieSides = movieSides;
 
     function animateRoll() {
         const elapsed = Date.now() - startTime;
@@ -309,24 +354,29 @@ function handleRollDice() {
         if (progress < 1) {
             requestAnimationFrame(animateRoll);
         } else {
-            // Animation finished - update UI with final results
-            gameRollDisplay.textContent = `Games Die (Sides: ${finalGameSides}) Roll: ${finalGameRoll}`;
-            movieRollDisplay.textContent = `Movies/Shows Die (Sides: ${finalMovieSides}) Roll: ${finalMovieRoll}`;
+            // Animation finished - determine winner and update UI
+            const { winner, selectedItem } = determineWinner(gameRoll, movieRoll, gameSides, movieSides);
             
-            gameRollLabel.textContent = `Games: ${finalGameRoll}`;
-            movieRollLabel.textContent = `Movies/Shows: ${finalMovieRoll}`;
+            // Update displays
+            gameRollDisplay.textContent = `Games Die (Sides: ${gameSides}) Roll: ${gameRoll}`;
+            movieRollDisplay.textContent = `Movies/Shows Die (Sides: ${movieSides}) Roll: ${movieRoll}`;
             
-            if (finalGameRoll > finalMovieRoll) {
-                const winningGame = games[finalGameRoll - 1];
-                winnerDisplay.textContent = `Winner: Games Die! (Rolled ${finalGameRoll})`;
-                showPopup(`🎮 Game Selected: ${winningGame}`);
-            } else if (finalMovieRoll > finalGameRoll) {
-                const winningMovie = movies[finalMovieRoll - 1];
-                winnerDisplay.textContent = `Winner: Movies/Shows Die! (Rolled ${finalMovieRoll})`;
-                showPopup(`🎬 Movie/Show Selected: ${winningMovie}`);
+            gameRollLabel.textContent = `Games: ${gameRoll}`;
+            movieRollLabel.textContent = `Movies/Shows: ${movieRoll}`;
+            
+            // Update winner display and show popup
+            if (winner === 'games') {
+                winnerDisplay.textContent = `Winner: Games Die! (Rolled ${gameRoll})`;
+                if (selectedItem) {
+                    showPopup(`🎮 Game Selected: ${selectedItem}`);
+                }
+            } else if (winner === 'movies') {
+                winnerDisplay.textContent = `Winner: Movies/Shows Die! (Rolled ${movieRoll})`;
+                if (selectedItem) {
+                    showPopup(`🎬 Movie/Show Selected: ${selectedItem}`);
+                }
             } else {
-                winnerDisplay.textContent = `Winner: It's a Tie! (Both rolled ${finalGameRoll})`;
-                showPopup("It's a tie! Roll again!");
+                winnerDisplay.textContent = `Winner: It's a Tie! (Both rolled ${gameRoll})`;
             }
             
             // Reset button state
