@@ -166,9 +166,8 @@ function initThreeJS() {
     plane.receiveShadow = true;
 
     scene.add(plane);
-
     // Add a boundary to keep dice in view
-    const boundaryGeometry = new THREE.BoxGeometry(10, 1, 10);
+    const boundaryGeometry = new THREE.BoxGeometry(5, 5, 5);
     const boundaryMaterial = new THREE.MeshBasicMaterial({
         color: 0x000000,
         wireframe: true,
@@ -176,8 +175,31 @@ function initThreeJS() {
         opacity: 0.1
     });
     const boundary = new THREE.Mesh(boundaryGeometry, boundaryMaterial);
-    boundary.position.y = -0.5;
+    boundary.position.y = .5;
     scene.add(boundary);
+
+    // Add physics boundary walls
+    const wallThickness = 0.1;
+    const wallHeight = 5;
+    const wallWidth = 5;
+
+    // Create walls
+    const walls = [
+        { size: [wallWidth, wallHeight, wallThickness], position: [0, wallHeight/2, wallWidth/2], rotation: [0, 0, 0] },  // Front
+        { size: [wallWidth, wallHeight, wallThickness], position: [0, wallHeight/2, -wallWidth/2], rotation: [0, 0, 0] }, // Back
+        { size: [wallThickness, wallHeight, wallWidth], position: [wallWidth/2, wallHeight/2, 0], rotation: [0, 0, 0] },  // Right
+        { size: [wallThickness, wallHeight, wallWidth], position: [-wallWidth/2, wallHeight/2, 0], rotation: [0, 0, 0] }  // Left
+    ];
+
+    walls.forEach(wall => {
+        const wallBody = new CANNON.Body({
+            mass: 0,
+            shape: new CANNON.Box(new CANNON.Vec3(wall.size[0]/2, wall.size[1]/2, wall.size[2]/2))
+        });
+        wallBody.position.set(wall.position[0], wall.position[1], wall.position[2]);
+        wallBody.quaternion.setFromEuler(wall.rotation[0], wall.rotation[1], wall.rotation[2]);
+        world.addBody(wallBody);
+    });
 
     // Dice materials
     const gameMaterial = new THREE.MeshStandardMaterial({
@@ -571,6 +593,17 @@ function handleRollDice() {
     diceStoppedCheckInterval = setInterval(() => {
         checkCount++;
         
+        // If dice are still rolling after 6 seconds, force them to stop and re-roll
+        if (checkCount >= 60) { // 60 checks * 100ms = 6 seconds
+            clearInterval(diceStoppedCheckInterval);
+            gameDiceBody.sleep();
+            movieDiceBody.sleep();
+            isRolling = false;
+            showPopup("Dice got stuck! Re-rolling...");
+            setTimeout(handleRollDice, 500);
+            return;
+        }
+        
         // Check if dice are sleeping or if we've reached max checks
         if ((gameDiceBody.sleepState === CANNON.Body.SLEEPING && 
              movieDiceBody.sleepState === CANNON.Body.SLEEPING) ||
@@ -584,14 +617,38 @@ function handleRollDice() {
                 movieDiceBody.sleep();
             }
 
+            const finalGameRoll = rollDie(gameSides);
+            const finalMovieRoll = rollDie(movieSides);
+            const { winner, selectedItem } = determineWinner(finalGameRoll, finalMovieRoll, gameSides, movieSides);
+
+            // If it's a tie, roll again automatically
+            if (winner === 'tie') {
+                // Reset the dice positions and velocities
+                gameDiceMesh.position.set(initialX_Game, initialY, 0);
+                movieDiceMesh.position.set(initialX_Movie, initialY, 0);
+                gameDiceBody.position.copy(gameDiceMesh.position);
+                movieDiceBody.position.copy(movieDiceMesh.position);
+                gameDiceBody.velocity.set(0, 0, 0);
+                movieDiceBody.velocity.set(0, 0, 0);
+                gameDiceBody.angularVelocity.set(0, 0, 0);
+                movieDiceBody.angularVelocity.set(0, 0, 0);
+
+                // Apply new forces
+                gameDiceBody.applyImpulse(gameForce, gameDiceBody.position);
+                gameDiceBody.applyTorque(gameTorque);
+                movieDiceBody.applyImpulse(movieForce, movieDiceBody.position);
+                movieDiceBody.applyTorque(movieTorque);
+
+                // Wake up bodies and continue rolling
+                gameDiceBody.wakeUp();
+                movieDiceBody.wakeUp();
+                checkCount = 0;
+                return;
+            }
+
             isRolling = false;
             rollDiceBtn.disabled = false;
             rollDiceBtn.textContent = 'Roll Dice!';
-
-            const finalGameRoll = rollDie(gameSides);
-            const finalMovieRoll = rollDie(movieSides);
-
-            const { winner, selectedItem } = determineWinner(finalGameRoll, finalMovieRoll, gameSides, movieSides);
 
             gameRollDisplay.textContent = `Games Die (Sides: ${gameSides}) Roll: ${finalGameRoll}`;
             movieRollDisplay.textContent = `Movies/Shows Die (Sides: ${movieSides}) Roll: ${finalMovieRoll}`;
@@ -608,8 +665,6 @@ function handleRollDice() {
                 if (selectedItem) {
                     showPopup(`🎬 Movie/Show Selected: ${selectedItem}`);
                 }
-            } else {
-                winnerDisplay.textContent = `Winner: It's a Tie! (Both rolled ${finalGameRoll})`;
             }
         }
     }, 100);
